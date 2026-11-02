@@ -23,3 +23,4 @@ export type RootStackNavigationProp = NativeStackNavigationProp<RootStackParamLi
 export type SwipeScreenRouteProp = RouteProp<RootStackParamList, 'Swipe'>;
 
 export type TabNavProp = BottomTabNavigationProp<TabParamList>;
+
