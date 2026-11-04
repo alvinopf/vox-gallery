@@ -86,3 +86,4 @@ vox-gallery/
    ```
 
 4. Abra no aplicativo **Expo Go** no celular físico (escaneando o QR Code ou conectando via USB com modo depuração).
+
