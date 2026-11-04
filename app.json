@@ -11,6 +11,11 @@
     },
     "android": {
       "package": "com.alvinopf.voxgallery",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_EXTERNAL_STORAGE"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#0F2942",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -21,6 +26,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "3e0b0522-0ff6-4281-860f-0356db416d01"
+      }
     }
   }
 }

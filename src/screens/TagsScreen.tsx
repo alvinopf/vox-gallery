@@ -1,32 +1,46 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Modal } from 'react-native';
+import { getStoredTags, storeTags } from '../services/storageService';
+
+const defaultTagsList = [
+  'Aniversário Dany',
+  'Campos do Jordão',
+  'Família',
+  'Viagem',
+  'Natureza',
+  'Praia',
+  'Amigos',
+  'Trabalho',
+];
 
 export function TagsScreen() {
-  const [tags, setTags] = useState<string[]>([
-    'Aniversário Dany',
-    'Campos do Jordão',
-    'Família',
-    'Viagem',
-    'Natureza',
-    'Praia',
-    'Amigos',
-    'Trabalho',
-  ]);
+  const [tags, setTags] = useState<string[]>([]);
+  const [modalVisible, setModalVisible] = useState<boolean>(false);
+  const [newTagText, setNewTagText] = useState<string>('');
 
-  const [modalVisible, setModalVisible] = useState(false);
-  const [newTagText, setNewTagText] = useState('');
+  useEffect(() => {
+    async function loadTags() {
+      const stored = await getStoredTags(defaultTagsList);
+      setTags(stored);
+    }
+    loadTags();
+  }, []);
 
-  function handleAddTag() {
+  async function handleAddTag() {
     const trimmed = newTagText.trim();
     if (trimmed && !tags.includes(trimmed)) {
-      setTags([...tags, trimmed]);
+      const updated = [...tags, trimmed];
+      setTags(updated);
+      await storeTags(updated);
       setNewTagText('');
       setModalVisible(false);
     }
   }
 
-  function handleDeleteTag(tagToDelete: string) {
-    setTags(tags.filter((tag) => tag !== tagToDelete));
+  async function handleDeleteTag(tagToDelete: string) {
+    const updated = tags.filter((tag) => tag !== tagToDelete);
+    setTags(updated);
+    await storeTags(updated);
   }
 
   return (
@@ -34,7 +48,7 @@ export function TagsScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>Gestão de Tags</Text>
-          <Text style={styles.subtitle}>Total de {tags.length} etiquetas cadastradas</Text>
+          <Text style={styles.subtitle}>Total de {tags.length} etiquetas salvas no disco</Text>
         </View>
         <Pressable
           style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}
