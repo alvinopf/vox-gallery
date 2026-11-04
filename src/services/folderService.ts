@@ -1,3 +1,4 @@
+import * as MediaLibrary from 'expo-media-library';
 import { api } from './api';
 import {
   getFolderTagsMap,
@@ -22,9 +23,10 @@ export interface Folder {
   icon: string;
   tags: string[];
   photos: Photo[];
+  isNativeAlbum?: boolean;
 }
 
-const initialFolders: Folder[] = [
+const sampleFolders: Folder[] = [
   {
     id: 'campos-2025',
     name: 'Viagem Campos do Jordão',
@@ -99,55 +101,14 @@ const initialFolders: Folder[] = [
       },
     ],
   },
-  {
-    id: 'praia-ubatuba',
-    name: 'Praia e Litoral',
-    photoCount: 2,
-    icon: '🏖️',
-    tags: ['Praia', 'Verão', 'Natureza'],
-    photos: [
-      {
-        id: 'pr-1',
-        title: 'Pôr do Sol na Praia',
-        uri: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600',
-        tags: ['Praia', 'Pôr do Sol', 'Natureza'],
-        date: '15/01/2026',
-        location: 'Litoral, PB',
-      },
-      {
-        id: 'pr-2',
-        title: 'Caminhada na Areia',
-        uri: 'https://images.unsplash.com/photo-1473496169904-658ba7c44d8a?w=600',
-        tags: ['Praia', 'Dany', 'Alvino'],
-        date: '15/01/2026',
-        location: 'Litoral, PB',
-      },
-    ],
-  },
-  {
-    id: 'pets-gatos',
-    name: 'Gatos e Pets',
-    photoCount: 2,
-    icon: '🐾',
-    tags: ['Pets', 'Gatos'],
-    photos: [
-      {
-        id: 'pt-1',
-        title: 'Gato Dormindo',
-        uri: 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=600',
-        tags: ['Pets', 'Gatos', 'Fofura'],
-        date: '10/05/2026',
-      },
-      {
-        id: 'pt-2',
-        title: 'Brincando na Sala',
-        uri: 'https://images.unsplash.com/photo-1573865526739-10659fec78a5?w=600',
-        tags: ['Pets', 'Gatos'],
-        date: '12/05/2026',
-      },
-    ],
-  },
 ];
+
+let cachedDeviceFolders: Folder[] = [];
+
+export async function requestGalleryPermission(): Promise<boolean> {
+  const { status } = await MediaLibrary.requestPermissionsAsync();
+  return status === 'granted';
+}
 
 export async function getFolders(simulateError = false): Promise<Folder[]> {
   if (simulateError) {
@@ -164,13 +125,64 @@ export async function getFolders(simulateError = false): Promise<Folder[]> {
     getPhotoTagsMap(),
   ]);
 
-  const mergedFolders = initialFolders.map((folder) => {
+  const hasPermission = await requestGalleryPermission();
+  const realFolders: Folder[] = [];
+
+  if (hasPermission) {
+    try {
+      const albums = await MediaLibrary.getAlbumsAsync({ includeSmartAlbums: true });
+      for (const album of albums.slice(0, 8)) {
+        if (album.assetCount > 0) {
+          const assets = await MediaLibrary.getAssetsAsync({
+            album: album.id,
+            mediaType: 'photo',
+            first: 20,
+          });
+
+          const photos: Photo[] = assets.assets.map((asset, index) => {
+            const savedPhotoTags = photoTagsMap[asset.id] || [];
+            const dateObj = new Date(asset.creationTime || Date.now());
+            const formattedDate = `${dateObj.getDate().toString().padStart(2, '0')}/${(dateObj.getMonth() + 1).toString().padStart(2, '0')}/${dateObj.getFullYear()}`;
+
+            return {
+              id: asset.id,
+              title: asset.filename || `Foto #${index + 1}`,
+              uri: asset.uri,
+              tags: savedPhotoTags,
+              date: formattedDate,
+              location: 'Dispositivo Local',
+            };
+          });
+
+          const savedFolderTags = folderTagsMap[album.id] || [];
+
+          realFolders.push({
+            id: album.id,
+            name: album.title,
+            photoCount: album.assetCount,
+            icon: '📱',
+            tags: savedFolderTags,
+            photos,
+            isNativeAlbum: true,
+          });
+        }
+      }
+    } catch {}
+  }
+
+  const baseList = realFolders.length > 0 ? [...realFolders, ...sampleFolders] : sampleFolders;
+
+  const merged = baseList.map((folder) => {
     const savedFolderTags = folderTagsMap[folder.id];
-    const updatedTags = savedFolderTags ? Array.from(new Set([...folder.tags, ...savedFolderTags])) : folder.tags;
+    const updatedTags = savedFolderTags
+      ? Array.from(new Set([...folder.tags, ...savedFolderTags]))
+      : folder.tags;
 
     const updatedPhotos = folder.photos.map((photo) => {
       const savedPhotoTags = photoTagsMap[photo.id];
-      const mergedTags = savedPhotoTags ? Array.from(new Set([...photo.tags, ...savedPhotoTags])) : photo.tags;
+      const mergedTags = savedPhotoTags
+        ? Array.from(new Set([...photo.tags, ...savedPhotoTags]))
+        : photo.tags;
       return {
         ...photo,
         tags: mergedTags,
@@ -184,10 +196,15 @@ export async function getFolders(simulateError = false): Promise<Folder[]> {
     };
   });
 
-  return mergedFolders;
+  cachedDeviceFolders = merged;
+  return merged;
 }
 
 export async function getFolderById(id: string): Promise<Folder | undefined> {
+  if (cachedDeviceFolders.length > 0) {
+    const found = cachedDeviceFolders.find((f) => f.id === id);
+    if (found) return found;
+  }
   const folders = await getFolders();
   return folders.find((f) => f.id === id);
 }
