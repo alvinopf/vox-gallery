@@ -1,8 +1,8 @@
-import React from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, Pressable, ScrollView, TextInput, Modal } from 'react-native';
 
 export function TagsScreen() {
-  const sampleTags = [
+  const [tags, setTags] = useState<string[]>([
     'Aniversário Dany',
     'Campos do Jordão',
     'Família',
@@ -11,47 +11,92 @@ export function TagsScreen() {
     'Praia',
     'Amigos',
     'Trabalho',
-  ];
+  ]);
+
+  const [modalVisible, setModalVisible] = useState(false);
+  const [newTagText, setNewTagText] = useState('');
+
+  function handleAddTag() {
+    const trimmed = newTagText.trim();
+    if (trimmed && !tags.includes(trimmed)) {
+      setTags([...tags, trimmed]);
+      setNewTagText('');
+      setModalVisible(false);
+    }
+  }
+
+  function handleDeleteTag(tagToDelete: string) {
+    setTags(tags.filter((tag) => tag !== tagToDelete));
+  }
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>Gestão de Tags</Text>
-          <Text style={styles.subtitle}>Crie, edite ou exclua tags para suas fotos</Text>
+          <Text style={styles.subtitle}>Total de {tags.length} etiquetas cadastradas</Text>
         </View>
         <Pressable
           style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}
-          onPress={() => alert('Criar nova tag')}
+          onPress={() => setModalVisible(true)}
         >
           <Text style={styles.addButtonText}>+ Nova</Text>
         </Pressable>
       </View>
 
       <ScrollView contentContainerStyle={styles.listContainer}>
-        {sampleTags.map((tag) => (
+        {tags.map((tag) => (
           <View key={tag} style={styles.tagCard}>
             <View style={styles.tagInfo}>
               <Text style={styles.tagIcon}>🏷️</Text>
               <Text style={styles.tagName}>{tag}</Text>
             </View>
-            <View style={styles.tagActions}>
-              <Pressable
-                style={styles.actionBtn}
-                onPress={() => alert(`Editar ${tag}`)}
-              >
-                <Text style={styles.editIcon}>✏️</Text>
-              </Pressable>
-              <Pressable
-                style={styles.actionBtn}
-                onPress={() => alert(`Excluir ${tag}`)}
-              >
-                <Text style={styles.deleteIcon}>🗑️</Text>
-              </Pressable>
-            </View>
+            <Pressable
+              style={styles.deleteButton}
+              onPress={() => handleDeleteTag(tag)}
+            >
+              <Text style={styles.deleteText}>🗑️ Excluir</Text>
+            </Pressable>
           </View>
         ))}
       </ScrollView>
+
+      <Modal
+        visible={modalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Nova Tag</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="Nome da tag (ex: Formatura)"
+              value={newTagText}
+              onChangeText={setNewTagText}
+              autoFocus
+            />
+            <View style={styles.modalActions}>
+              <Pressable
+                style={[styles.modalBtn, styles.cancelBtn]}
+                onPress={() => {
+                  setNewTagText('');
+                  setModalVisible(false);
+                }}
+              >
+                <Text style={styles.cancelText}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalBtn, styles.confirmBtn]}
+                onPress={handleAddTag}
+              >
+                <Text style={styles.confirmText}>Adicionar</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -120,19 +165,70 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#2D3748',
   },
-  tagActions: {
-    flexDirection: 'row',
+  deleteButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    backgroundColor: '#FFF5F5',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FEB2B2',
+  },
+  deleteText: {
+    fontSize: 12,
+    color: '#E53E3E',
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
     alignItems: 'center',
-    gap: 12,
+    padding: 20,
   },
-  actionBtn: {
-    padding: 4,
+  modalContent: {
+    width: '100%',
+    maxWidth: 340,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    elevation: 5,
   },
-  editIcon: {
-    fontSize: 16,
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#0F2942',
+    marginBottom: 12,
   },
-  deleteIcon: {
-    fontSize: 16,
+  input: {
+    borderWidth: 1,
+    borderColor: '#CBD5E0',
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 14,
+    marginBottom: 16,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  modalBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 6,
+  },
+  cancelBtn: {
+    backgroundColor: '#EDF2F7',
+  },
+  confirmBtn: {
+    backgroundColor: '#1E6091',
+  },
+  cancelText: {
+    color: '#4A5568',
+    fontWeight: '600',
+  },
+  confirmText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
 });
-
