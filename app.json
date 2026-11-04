@@ -11,6 +11,11 @@
     },
     "android": {
       "package": "com.alvinopf.voxgallery",
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_EXTERNAL_STORAGE"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#0F2942",
         "foregroundImage": "./assets/android-icon-foreground.png",

@@ -11,10 +11,10 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { RootStackNavigationProp } from '../types/navigation';
-import { Folder, getFolders } from '../services/folderService';
+import { Folder, getFolders, addTagToFolder } from '../services/folderService';
 import { CardFolder } from '../components/CardFolder';
 import { VoiceButton } from '../components/VoiceButton';
-import { transcribeVoice } from '../services/voiceService';
+import { startRecording, stopRecordingAndTranscribe } from '../services/voiceService';
 
 export function FoldersScreen() {
   const navigation = useNavigation<RootStackNavigationProp>();
@@ -50,19 +50,31 @@ export function FoldersScreen() {
     });
   }
 
-  async function handleBatchVoiceTag() {
-    try {
-      setIsListening(true);
-      const result = await transcribeVoice();
-      setIsListening(false);
-      setVoiceModalVisible(false);
-      Alert.alert(
-        'Voz Reconhecida!',
-        `Etiqueta "${result.tag}" aplicada com sucesso a todas as fotos da pasta "${selectedFolderForVoice?.name}".`
-      );
-    } catch (error) {
-      setIsListening(false);
-      Alert.alert('Erro de Voz', 'Não foi possível transcrever o comando de voz.');
+  async function handleToggleBatchVoiceTag() {
+    if (!selectedFolderForVoice) return;
+
+    if (!isListening) {
+      try {
+        await startRecording();
+        setIsListening(true);
+      } catch (error: any) {
+        Alert.alert('Microfone', error.message || 'Não foi possível iniciar a gravação.');
+      }
+    } else {
+      try {
+        setIsListening(false);
+        const recognizedTag = await stopRecordingAndTranscribe();
+        await addTagToFolder(selectedFolderForVoice.id, recognizedTag);
+        setVoiceModalVisible(false);
+        await loadFolders(false);
+        Alert.alert(
+          'Tag de Voz Reconhecida!',
+          `Etiqueta "${recognizedTag}" aplicada a todas as fotos da pasta "${selectedFolderForVoice.name}" e salva no disco!`
+        );
+      } catch (error: any) {
+        setIsListening(false);
+        Alert.alert('Reconhecimento de Voz', error.message || 'Erro ao processar áudio.');
+      }
     }
   }
 
@@ -89,7 +101,7 @@ export function FoldersScreen() {
       {loading && (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#1E6091" />
-          <Text style={styles.loadingText}>Carregando pastas via API...</Text>
+          <Text style={styles.loadingText}>Carregando pastas e fotos do dispositivo...</Text>
         </View>
       )}
 
@@ -111,7 +123,7 @@ export function FoldersScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent}>
           <View style={styles.noticeCard}>
             <Text style={styles.noticeText}>
-              💡 Dica: Toque em uma pasta para abrir o Modo Swipe ou segure para taguear em lote por voz.
+              💡 Álbuns nativos e pastas inteligentes integradas com gravação de voz real e persistência local.
             </Text>
           </View>
 
@@ -140,7 +152,9 @@ export function FoldersScreen() {
         visible={voiceModalVisible}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setVoiceModalVisible(false)}
+        onRequestClose={() => {
+          if (!isListening) setVoiceModalVisible(false);
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
@@ -149,14 +163,16 @@ export function FoldersScreen() {
               Pasta selecionada: <Text style={styles.boldText}>{selectedFolderForVoice?.name}</Text>
             </Text>
             <Text style={styles.modalInstruction}>
-              Pressione o botão abaixo e fale a etiqueta desejada.
+              {isListening
+                ? 'Gravando... Fale o nome da tag e toque no botão para parar e transcrever.'
+                : 'Toque abaixo para iniciar a gravação por voz com a Wit.ai.'}
             </Text>
 
             <View style={styles.voiceBtnContainer}>
               <VoiceButton
-                title="Falar Tag para a Pasta"
+                title="Gravar Tag p/ a Pasta"
                 isListening={isListening}
-                onPress={handleBatchVoiceTag}
+                onPress={handleToggleBatchVoiceTag}
               />
             </View>
 

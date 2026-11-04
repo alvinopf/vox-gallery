@@ -15,7 +15,7 @@ import { SwipeScreenRouteProp } from '../types/navigation';
 import { getFolderById, Photo, savePhotoTagsDirectly } from '../services/folderService';
 import { TagBadge } from '../components/TagBadge';
 import { VoiceButton } from '../components/VoiceButton';
-import { transcribeVoice } from '../services/voiceService';
+import { startRecording, stopRecordingAndTranscribe } from '../services/voiceService';
 
 export function SwipeScreen() {
   const route = useRoute<SwipeScreenRouteProp>();
@@ -53,29 +53,38 @@ export function SwipeScreen() {
     }
   }
 
-  async function handleVoiceTag() {
-    try {
-      setIsListening(true);
-      const result = await transcribeVoice();
-      setIsListening(false);
-      if (currentPhoto && !currentPhoto.tags.includes(result.tag)) {
-        currentPhoto.tags.push(result.tag);
-        setPhotos([...photos]);
-        await savePhotoTagsDirectly(currentPhoto.id, currentPhoto.tags);
+  async function handleToggleVoiceTag() {
+    if (!isListening) {
+      try {
+        await startRecording();
+        setIsListening(true);
+      } catch (error: any) {
+        Alert.alert('Microfone', error.message || 'Não foi possível iniciar a gravação.');
       }
-      Alert.alert('Tag Adicionada!', `Etiqueta "${result.tag}" aplicada à foto e salva no disco.`);
-    } catch (error) {
-      setIsListening(false);
-      Alert.alert('Erro de Voz', 'Não foi possível transcrever o áudio.');
+    } else {
+      try {
+        setIsListening(false);
+        const recognizedTag = await stopRecordingAndTranscribe();
+        if (currentPhoto && !currentPhoto.tags.includes(recognizedTag)) {
+          const updated = [...currentPhoto.tags, recognizedTag];
+          currentPhoto.tags = updated;
+          setPhotos([...photos]);
+          await savePhotoTagsDirectly(currentPhoto.id, updated);
+        }
+        Alert.alert('Tag de Voz Reconhecida!', `Etiqueta "${recognizedTag}" salva com sucesso!`);
+      } catch (error: any) {
+        Alert.alert('Reconhecimento de Voz', error.message || 'Erro ao processar áudio.');
+      }
     }
   }
 
   async function handleAddManualTag() {
     const trimmed = manualTagText.trim();
     if (trimmed && currentPhoto && !currentPhoto.tags.includes(trimmed)) {
-      currentPhoto.tags.push(trimmed);
+      const updated = [...currentPhoto.tags, trimmed];
+      currentPhoto.tags = updated;
       setPhotos([...photos]);
-      await savePhotoTagsDirectly(currentPhoto.id, currentPhoto.tags);
+      await savePhotoTagsDirectly(currentPhoto.id, updated);
       setManualTagText('');
       setModalVisible(false);
     }
@@ -83,9 +92,10 @@ export function SwipeScreen() {
 
   async function handleRemoveTag(tagToRemove: string) {
     if (currentPhoto) {
-      currentPhoto.tags = currentPhoto.tags.filter((t) => t !== tagToRemove);
+      const updated = currentPhoto.tags.filter((t) => t !== tagToRemove);
+      currentPhoto.tags = updated;
       setPhotos([...photos]);
-      await savePhotoTagsDirectly(currentPhoto.id, currentPhoto.tags);
+      await savePhotoTagsDirectly(currentPhoto.id, updated);
     }
   }
 
@@ -132,7 +142,7 @@ export function SwipeScreen() {
           </View>
 
           <View style={styles.tagsContainer}>
-            <Text style={styles.tagsHeader}>Tags desta foto (Salvas no disco):</Text>
+            <Text style={styles.tagsHeader}>Tags desta foto (Gravadas no disco):</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tagsScroll}>
               {currentPhoto.tags.map((tag) => (
                 <TagBadge
@@ -146,9 +156,9 @@ export function SwipeScreen() {
 
           <View style={styles.actionsBox}>
             <VoiceButton
-              title="Falar Tag p/ Foto"
+              title="Gravar Tag por Voz"
               isListening={isListening}
-              onPress={handleVoiceTag}
+              onPress={handleToggleVoiceTag}
             />
             <Pressable style={styles.manualBtn} onPress={() => setModalVisible(true)}>
               <Text style={styles.manualBtnText}>✏️ Ou digite a tag manualmente...</Text>
@@ -157,7 +167,7 @@ export function SwipeScreen() {
         </View>
       ) : (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Nenhuma foto nesta pasta.</Text>
+          <Text style={styles.emptyText}>Nenhuma foto encontrada nesta pasta.</Text>
         </View>
       )}
 
@@ -172,7 +182,7 @@ export function SwipeScreen() {
             <Text style={styles.modalTitle}>Adicionar Tag à Foto</Text>
             <TextInput
               style={styles.input}
-              placeholder="Ex: Pôr do sol, Família..."
+              placeholder="Ex: Giselle, Formatura, Praia..."
               value={manualTagText}
               onChangeText={setManualTagText}
               autoFocus
