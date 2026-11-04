@@ -1,4 +1,10 @@
 import { api } from './api';
+import {
+  getFolderTagsMap,
+  getPhotoTagsMap,
+  storeFolderTags,
+  storePhotoTags,
+} from './storageService';
 
 export interface Photo {
   id: string;
@@ -18,7 +24,7 @@ export interface Folder {
   photos: Photo[];
 }
 
-const mockFolders: Folder[] = [
+const initialFolders: Folder[] = [
   {
     id: 'campos-2025',
     name: 'Viagem Campos do Jordão',
@@ -151,11 +157,34 @@ export async function getFolders(simulateError = false): Promise<Folder[]> {
 
   try {
     await api.get('/posts/1');
-  } catch (err) {
-  }
+  } catch (err) {}
 
-  await new Promise((resolve) => setTimeout(resolve, 600));
-  return mockFolders;
+  const [folderTagsMap, photoTagsMap] = await Promise.all([
+    getFolderTagsMap(),
+    getPhotoTagsMap(),
+  ]);
+
+  const mergedFolders = initialFolders.map((folder) => {
+    const savedFolderTags = folderTagsMap[folder.id];
+    const updatedTags = savedFolderTags ? Array.from(new Set([...folder.tags, ...savedFolderTags])) : folder.tags;
+
+    const updatedPhotos = folder.photos.map((photo) => {
+      const savedPhotoTags = photoTagsMap[photo.id];
+      const mergedTags = savedPhotoTags ? Array.from(new Set([...photo.tags, ...savedPhotoTags])) : photo.tags;
+      return {
+        ...photo,
+        tags: mergedTags,
+      };
+    });
+
+    return {
+      ...folder,
+      tags: updatedTags,
+      photos: updatedPhotos,
+    };
+  });
+
+  return mergedFolders;
 }
 
 export async function getFolderById(id: string): Promise<Folder | undefined> {
@@ -164,15 +193,21 @@ export async function getFolderById(id: string): Promise<Folder | undefined> {
 }
 
 export async function addTagToFolder(folderId: string, newTag: string): Promise<boolean> {
-  const folder = mockFolders.find((f) => f.id === folderId);
+  const folders = await getFolders();
+  const folder = folders.find((f) => f.id === folderId);
   if (!folder) return false;
-  if (!folder.tags.includes(newTag)) {
-    folder.tags.push(newTag);
+
+  const currentFolderTags = Array.from(new Set([...folder.tags, newTag]));
+  await storeFolderTags(folderId, currentFolderTags);
+
+  for (const photo of folder.photos) {
+    const updatedPhotoTags = Array.from(new Set([...photo.tags, newTag]));
+    await storePhotoTags(photo.id, updatedPhotoTags);
   }
-  folder.photos.forEach((photo) => {
-    if (!photo.tags.includes(newTag)) {
-      photo.tags.push(newTag);
-    }
-  });
+
   return true;
+}
+
+export async function savePhotoTagsDirectly(photoId: string, tags: string[]): Promise<void> {
+  await storePhotoTags(photoId, tags);
 }

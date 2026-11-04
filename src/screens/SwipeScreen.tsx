@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { SwipeScreenRouteProp } from '../types/navigation';
-import { getFolderById, Photo } from '../services/folderService';
+import { getFolderById, Photo, savePhotoTagsDirectly } from '../services/folderService';
 import { TagBadge } from '../components/TagBadge';
 import { VoiceButton } from '../components/VoiceButton';
 import { transcribeVoice } from '../services/voiceService';
@@ -61,28 +61,31 @@ export function SwipeScreen() {
       if (currentPhoto && !currentPhoto.tags.includes(result.tag)) {
         currentPhoto.tags.push(result.tag);
         setPhotos([...photos]);
+        await savePhotoTagsDirectly(currentPhoto.id, currentPhoto.tags);
       }
-      Alert.alert('Tag Adicionada!', `Etiqueta "${result.tag}" aplicada à foto.`);
+      Alert.alert('Tag Adicionada!', `Etiqueta "${result.tag}" aplicada à foto e salva no disco.`);
     } catch (error) {
       setIsListening(false);
       Alert.alert('Erro de Voz', 'Não foi possível transcrever o áudio.');
     }
   }
 
-  function handleAddManualTag() {
+  async function handleAddManualTag() {
     const trimmed = manualTagText.trim();
     if (trimmed && currentPhoto && !currentPhoto.tags.includes(trimmed)) {
       currentPhoto.tags.push(trimmed);
       setPhotos([...photos]);
+      await savePhotoTagsDirectly(currentPhoto.id, currentPhoto.tags);
       setManualTagText('');
       setModalVisible(false);
     }
   }
 
-  function handleRemoveTag(tagToRemove: string) {
+  async function handleRemoveTag(tagToRemove: string) {
     if (currentPhoto) {
       currentPhoto.tags = currentPhoto.tags.filter((t) => t !== tagToRemove);
       setPhotos([...photos]);
+      await savePhotoTagsDirectly(currentPhoto.id, currentPhoto.tags);
     }
   }
 
@@ -129,7 +132,7 @@ export function SwipeScreen() {
           </View>
 
           <View style={styles.tagsContainer}>
-            <Text style={styles.tagsHeader}>Tags desta foto:</Text>
+            <Text style={styles.tagsHeader}>Tags desta foto (Salvas no disco):</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tagsScroll}>
               {currentPhoto.tags.map((tag) => (
                 <TagBadge
