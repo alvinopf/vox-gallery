@@ -41,7 +41,8 @@
             "extraProguardRules": "-dontwarn expo.modules.**\n-dontwarn expo.modules.core.interfaces.services.KeepAwakeManager\n-dontwarn expo.modules.kotlin.types.**\n-dontwarn expo.modules.av.**\n-keep class expo.modules.av.** { *; }\n-keep class expo.modules.** { *; }"
           }
         }
-      ]
+      ],
+      "expo-audio"
     ]
   }
 }
