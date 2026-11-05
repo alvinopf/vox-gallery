@@ -1,18 +1,18 @@
 import {
   AudioModule,
-  RecordingPresets,
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
 } from 'expo-audio';
-import type { AudioRecorder } from 'expo-audio';
+import type { AudioStream } from 'expo-audio';
+import { File } from 'expo-file-system';
 
 const WIT_AI_CLIENT_TOKEN = 'DLGWXTQUJ47LW2JVJILBXU6QDMBWSSWT';
 
-let currentRecorder: AudioRecorder | null = null;
+let currentStream: AudioStream | null = null;
 
 export async function requestMicrophonePermission(): Promise<boolean> {
-  const { status } = await requestRecordingPermissionsAsync();
-  return status === 'granted';
+  const { status, granted } = await requestRecordingPermissionsAsync();
+  return granted || status === 'granted';
 }
 
 export async function startRecording(): Promise<void> {
@@ -26,50 +26,99 @@ export async function startRecording(): Promise<void> {
     playsInSilentMode: true,
   });
 
-  if (currentRecorder) {
+  if (currentStream) {
     try {
-      await currentRecorder.stop();
+      await currentStream.stopFileRecordingAsync();
     } catch {}
-    currentRecorder = null;
+    try {
+      currentStream.stop();
+    } catch {}
+    currentStream = null;
   }
 
-  const recorder = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
-  await recorder.prepareToRecordAsync();
-  recorder.record();
-  currentRecorder = recorder;
+  const stream = new AudioModule.AudioStream({
+    sampleRate: 16000,
+    channels: 1,
+    encoding: 'int16',
+  });
+
+  await stream.start();
+  await stream.startFileRecordingAsync({ format: 'wav' });
+  currentStream = stream;
 }
 
 export async function stopRecordingAndTranscribe(): Promise<string> {
-  if (!currentRecorder) {
+  if (!currentStream) {
     throw new Error('Nenhuma gravação em andamento.');
   }
 
-  await currentRecorder.stop();
-  const uri = currentRecorder.uri;
-  currentRecorder = null;
+  const stream = currentStream;
+  currentStream = null;
 
+  const recordingResult = await stream.stopFileRecordingAsync();
+  stream.stop();
+
+  const uri = recordingResult.uri;
   if (!uri) {
-    throw new Error('Não foi possível obter o áudio gravado.');
+    throw new Error('Não foi possível obter o arquivo de áudio gravado.');
   }
 
-  const audioFileResponse = await fetch(uri);
-  const audioBlob = await audioFileResponse.blob();
-
-  const response = await fetch('https://api.wit.ai/speech?v=20230215', {
-    method: 'POST',
+  const file = new File(uri);
+  const uploadResult = await file.upload('https://api.wit.ai/speech?v=20230215', {
+    httpMethod: 'POST',
     headers: {
       Authorization: `Bearer ${WIT_AI_CLIENT_TOKEN}`,
-      'Content-Type': 'audio/m4a',
+      'Content-Type': 'audio/wav',
     },
-    body: audioBlob,
   });
 
-  if (!response.ok) {
-    throw new Error('Falha na comunicação com a API Wit.ai.');
+  if (uploadResult.status < 200 || uploadResult.status >= 300) {
+    let errorDetail = '';
+    try {
+      const parsed = JSON.parse(uploadResult.body);
+      errorDetail = parsed.error || parsed.message || '';
+    } catch {}
+    throw new Error(errorDetail ? `Wit.ai: ${errorDetail}` : 'Falha na comunicação com a API Wit.ai.');
   }
 
-  const data = await response.json();
-  const rawText: string = data.text || '';
+  let rawText = '';
+  if (uploadResult.body) {
+    const lines = uploadResult.body.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const parsed = JSON.parse(lines[i]);
+        if (parsed.text && parsed.text.trim()) {
+          rawText = parsed.text;
+          break;
+        }
+      } catch {}
+    }
+
+    if (!rawText) {
+      const jsonObjects = uploadResult.body.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g) || [];
+      for (let i = jsonObjects.length - 1; i >= 0; i--) {
+        try {
+          const parsed = JSON.parse(jsonObjects[i]);
+          if (parsed.text && parsed.text.trim()) {
+            rawText = parsed.text;
+            break;
+          }
+        } catch {}
+      }
+    }
+
+    if (!rawText) {
+      const textMatches = Array.from(uploadResult.body.matchAll(/"text"\s*:\s*"([^"]+)"/g));
+      for (let i = textMatches.length - 1; i >= 0; i--) {
+        const found = textMatches[i][1];
+        if (found && found.trim()) {
+          rawText = found;
+          break;
+        }
+      }
+    }
+  }
+
   const cleanedText = rawText.replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, '').trim();
 
   if (!cleanedText) {
