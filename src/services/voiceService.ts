@@ -1,11 +1,17 @@
-import { Audio } from 'expo-av';
+import {
+  AudioModule,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+} from 'expo-audio';
+import type { AudioRecorder } from 'expo-audio';
 
 const WIT_AI_CLIENT_TOKEN = 'DLGWXTQUJ47LW2JVJILBXU6QDMBWSSWT';
 
-let currentRecording: Audio.Recording | null = null;
+let currentRecorder: AudioRecorder | null = null;
 
 export async function requestMicrophonePermission(): Promise<boolean> {
-  const { status } = await Audio.requestPermissionsAsync();
+  const { status } = await requestRecordingPermissionsAsync();
   return status === 'granted';
 }
 
@@ -15,32 +21,32 @@ export async function startRecording(): Promise<void> {
     throw new Error('Permissão de acesso ao microfone foi negada.');
   }
 
-  await Audio.setAudioModeAsync({
-    allowsRecordingIOS: true,
-    playsInSilentModeIOS: true,
+  await setAudioModeAsync({
+    allowsRecording: true,
+    playsInSilentMode: true,
   });
 
-  if (currentRecording) {
+  if (currentRecorder) {
     try {
-      await currentRecording.stopAndUnloadAsync();
+      await currentRecorder.stop();
     } catch {}
-    currentRecording = null;
+    currentRecorder = null;
   }
 
-  const recording = new Audio.Recording();
-  await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-  await recording.startAsync();
-  currentRecording = recording;
+  const recorder = new AudioModule.AudioRecorder(RecordingPresets.HIGH_QUALITY);
+  await recorder.prepareToRecordAsync();
+  recorder.record();
+  currentRecorder = recorder;
 }
 
 export async function stopRecordingAndTranscribe(): Promise<string> {
-  if (!currentRecording) {
+  if (!currentRecorder) {
     throw new Error('Nenhuma gravação em andamento.');
   }
 
-  await currentRecording.stopAndUnloadAsync();
-  const uri = currentRecording.getURI();
-  currentRecording = null;
+  await currentRecorder.stop();
+  const uri = currentRecorder.uri;
+  currentRecorder = null;
 
   if (!uri) {
     throw new Error('Não foi possível obter o áudio gravado.');
