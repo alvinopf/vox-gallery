@@ -1,4 +1,4 @@
-import * as MediaLibrary from 'expo-media-library';
+import * as MediaLibrary from 'expo-media-library/legacy';
 import { api } from './api';
 import {
   getFolderTagsMap,
@@ -106,8 +106,16 @@ const sampleFolders: Folder[] = [
 let cachedDeviceFolders: Folder[] = [];
 
 export async function requestGalleryPermission(): Promise<boolean> {
-  const { status } = await MediaLibrary.requestPermissionsAsync();
-  return status === 'granted';
+  try {
+    const current = await MediaLibrary.getPermissionsAsync();
+    if (current.granted || current.status === 'granted') {
+      return true;
+    }
+    const requested = await MediaLibrary.requestPermissionsAsync();
+    return requested.granted || requested.status === 'granted';
+  } catch {
+    return false;
+  }
 }
 
 export async function getFolders(simulateError = false): Promise<Folder[]> {
@@ -130,42 +138,80 @@ export async function getFolders(simulateError = false): Promise<Folder[]> {
 
   if (hasPermission) {
     try {
+      const allRecent = await MediaLibrary.getAssetsAsync({
+        mediaType: 'photo',
+        first: 50,
+        sortBy: [['creationTime', false]],
+      });
+
+      if (allRecent.assets && allRecent.assets.length > 0) {
+        const recentPhotos: Photo[] = allRecent.assets.map((asset, index) => {
+          const savedPhotoTags = photoTagsMap[asset.id] || [];
+          const dateObj = new Date(asset.creationTime || Date.now());
+          const formattedDate = `${dateObj.getDate().toString().padStart(2, '0')}/${(dateObj.getMonth() + 1).toString().padStart(2, '0')}/${dateObj.getFullYear()}`;
+
+          return {
+            id: asset.id,
+            title: asset.filename || `Foto #${index + 1}`,
+            uri: asset.uri,
+            tags: savedPhotoTags,
+            date: formattedDate,
+            location: 'Câmera / Galeria',
+          };
+        });
+
+        const savedMainFolderTags = folderTagsMap['device-main-camera'] || [];
+
+        realFolders.push({
+          id: 'device-main-camera',
+          name: 'Galeria do Aparelho (Recentes)',
+          photoCount: allRecent.totalCount || recentPhotos.length,
+          icon: '📸',
+          tags: savedMainFolderTags,
+          photos: recentPhotos,
+          isNativeAlbum: true,
+        });
+      }
+
       const albums = await MediaLibrary.getAlbumsAsync({ includeSmartAlbums: true });
-      for (const album of albums.slice(0, 8)) {
-        if (album.assetCount > 0) {
+      for (const album of albums.slice(0, 10)) {
+        try {
           const assets = await MediaLibrary.getAssetsAsync({
             album: album.id,
             mediaType: 'photo',
-            first: 20,
+            first: 25,
+            sortBy: [['creationTime', false]],
           });
 
-          const photos: Photo[] = assets.assets.map((asset, index) => {
-            const savedPhotoTags = photoTagsMap[asset.id] || [];
-            const dateObj = new Date(asset.creationTime || Date.now());
-            const formattedDate = `${dateObj.getDate().toString().padStart(2, '0')}/${(dateObj.getMonth() + 1).toString().padStart(2, '0')}/${dateObj.getFullYear()}`;
+          if (assets.assets && assets.assets.length > 0) {
+            const photos: Photo[] = assets.assets.map((asset, index) => {
+              const savedPhotoTags = photoTagsMap[asset.id] || [];
+              const dateObj = new Date(asset.creationTime || Date.now());
+              const formattedDate = `${dateObj.getDate().toString().padStart(2, '0')}/${(dateObj.getMonth() + 1).toString().padStart(2, '0')}/${dateObj.getFullYear()}`;
 
-            return {
-              id: asset.id,
-              title: asset.filename || `Foto #${index + 1}`,
-              uri: asset.uri,
-              tags: savedPhotoTags,
-              date: formattedDate,
-              location: 'Dispositivo Local',
-            };
-          });
+              return {
+                id: asset.id,
+                title: asset.filename || `Foto #${index + 1}`,
+                uri: asset.uri,
+                tags: savedPhotoTags,
+                date: formattedDate,
+                location: album.title,
+              };
+            });
 
-          const savedFolderTags = folderTagsMap[album.id] || [];
+            const savedFolderTags = folderTagsMap[album.id] || [];
 
-          realFolders.push({
-            id: album.id,
-            name: album.title,
-            photoCount: album.assetCount,
-            icon: '📱',
-            tags: savedFolderTags,
-            photos,
-            isNativeAlbum: true,
-          });
-        }
+            realFolders.push({
+              id: album.id,
+              name: album.title,
+              photoCount: album.assetCount || photos.length,
+              icon: '📱',
+              tags: savedFolderTags,
+              photos,
+              isNativeAlbum: true,
+            });
+          }
+        } catch {}
       }
     } catch {}
   }
